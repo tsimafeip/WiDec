@@ -1,7 +1,5 @@
-#  Assignments for [EN 601.468/668 Machine Translation](http://mt-class.org/jhu/)
+#  WiDec (Wizard Decoder) :mage_man:
 
-This is the repo for homework assignment for JHU Machine Translation class.
+This project aims to implement an effective decoding step for Statistical Machine Translation.
 
-Homework 2-3 are originally from https://github.com/alopez/en600.468
-
-Homework 4-5 are designed by Huda Khayrallah and Brian Thompson
+It is based on HW3 ([description](http://mt-class.org/jhu/hw2.html), [github](https://github.com/xutaima/jhu-mt-hw/tree/master/hw3)) from [JHU Machine Translation class](http://mt-class.org/jhu/).
