@@ -29,52 +29,62 @@ for word in set(sum(french, ())):
     if (word,) not in tm:
         tm[(word,)] = [models.phrase(word, 0.0)]
 
+hypothesis = namedtuple("hypothesis", "logprob, lm_state, predecessor, phrase")
+initial_hypothesis = hypothesis(0.0, lm.begin(), None, None)
+
+
+def extract_english(h: hypothesis) -> str:
+    """Extracts English phrase from hypothesis."""
+    return "" if h.predecessor is None else "%s%s " % (extract_english(h.predecessor), h.phrase.english)
+
+
+def extract_tm_logprob(h: hypothesis) -> float:
+    """Recursively extracts logprob of the resulting phrase."""
+    return 0.0 if h.predecessor is None else h.phrase.logprob + extract_tm_logprob(h.predecessor)
+
+
 sys.stderr.write("Decoding %s...\n" % (opts.input,))
+# The following code implements a monotone decoding
+# algorithm (one that doesn't permute the target phrases).
+# Hence, all hypotheses in stacks[i] represent translations of
+# the first i words of the input sentence. You should generalize
+# this so that they can represent translations of *any* i words.
 for f in french:
-    # The following code implements a monotone decoding
-    # algorithm (one that doesn't permute the target phrases).
-    # Hence, all hypotheses in stacks[i] represent translations of
-    # the first i words of the input sentence. You should generalize
-    # this so that they can represent translations of *any* i words.
-    hypothesis = namedtuple("hypothesis", "logprob, lm_state, predecessor, phrase")
-    initial_hypothesis = hypothesis(0.0, lm.begin(), None, None)
+    # First, it seeks the Viterbi approximation to the most probable translation.
+    # Instead of computing the intractable sum over all alignments for each sentence,
+    # we simply find the best single alignment and use its translation.
+    # Stacks in an analogue for Viterbi matrix.
     stacks = [{} for _ in f] + [{}]
     stacks[0][lm.begin()] = initial_hypothesis
 
     # iterates by all stacks except the last one which contains the result
     for i, stack in enumerate(stacks[:-1]):
-        # sort hypotheses
+        # sort all hypothesis ending in current i position and select top-s
         for h in sorted(stack.values(), key=lambda h: -h.logprob)[:opts.s]:  # prune
+            # all possible next spans starting in i
             for j in range(i + 1, len(f) + 1):
-                if f[i:j] in tm:
-                    # Iterates by all possible translations of french phrase.
-                    # By default, here is only the most probable translation.
-                    for phrase in tm[f[i:j]]:
-                        logprob = h.logprob + phrase.logprob
-                        lm_state = h.lm_state
-                        for word in phrase.english.split():
-                            (lm_state, word_logprob) = lm.score(lm_state, word)
-                            logprob += word_logprob
-                        logprob += lm.end(lm_state) if j == len(f) else 0.0
-                        new_hypothesis = hypothesis(logprob, lm_state, h, phrase)
-                        # second case is recombination
-                        if lm_state not in stacks[j] or stacks[j][lm_state].logprob < logprob:
-                            stacks[j][lm_state] = new_hypothesis
+                french_span = f[i:j]
+                english_translations = tm.get(french_span, [])
+                # Iterates by all possible translations of french phrase.
+                # By default, here is only the most probable translation.
+                for phrase in english_translations:
+                    # accumulate TM-logprob with prev hypothesis
+                    logprob = h.logprob + phrase.logprob
+                    lm_state = h.lm_state
+                    # add LM-logprob
+                    for word in phrase.english.split():
+                        (lm_state, word_logprob) = lm.score(lm_state, word)
+                        logprob += word_logprob
+                    logprob += lm.end(lm_state) if j == len(f) else 0.0
+                    new_hypothesis = hypothesis(logprob, lm_state, h, phrase)
+                    # second case is recombination, keep in mind that logprobs are negative
+                    if lm_state not in stacks[j] or stacks[j][lm_state].logprob < logprob:
+                        stacks[j][lm_state] = new_hypothesis
     winner = max(stacks[-1].values(), key=lambda h: h.logprob)
-
-
-    def extract_english(h):
-        """Extracts English phrase from hypothesis."""
-        return "" if h.predecessor is None else "%s%s " % (extract_english(h.predecessor), h.phrase.english)
-
 
     print(extract_english(winner))
 
     if opts.verbose:
-        def extract_tm_logprob(h):
-            """Recursively extracts logprob of the resulting phrase."""
-            return 0.0 if h.predecessor is None else h.phrase.logprob + extract_tm_logprob(h.predecessor)
-
         tm_logprob = extract_tm_logprob(winner)
         sys.stderr.write("LM = %f, TM = %f, Total = %f\n" %
                          (winner.logprob - tm_logprob, tm_logprob, winner.logprob))
