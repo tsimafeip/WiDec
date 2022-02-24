@@ -53,7 +53,7 @@ optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxs
                      help="Number of sentences to decode (default=no limit)")
 optparser.add_option("-k", "--translations-per-phrase", dest="k", default=20, type="int",
                      help="Limit on number of translations to consider per phrase (default=1)")
-optparser.add_option("-s", "--stack-size", dest="s", default=1, type="int", help="Maximum stack size (default=1)")
+optparser.add_option("-s", "--stack-size", dest="s", default=100, type="int", help="Maximum stack size (default=1)")
 optparser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=True,
                      help="Verbose mode (default=off)")
 opts = optparser.parse_args()[0]
@@ -98,7 +98,7 @@ for f in french:
     start = timer()
     for i, stack in enumerate(stacks[:-1]):
         # iterate by all hypotheses covering i French words
-        for h in stack.values():
+        for h in sorted(stack.values(), key=lambda h: -h.logprob)[:opts.s]:  # prune
             # find all possible next spans of length [1, len(f) + 1 - i]
             for span_len in range(1, len(f) + 1 - i):
                 for fi in range(len(f)):
@@ -106,6 +106,11 @@ for f in french:
                     # if selected French words are not translated
                     if bitmap(range(fi, fj)) & h.french_bitmap_coverage == 0:
                         f_words_translated = i + (fj - fi)
+
+                        # prune
+                        if len(stacks[f_words_translated]) > opts.s:
+                            continue
+
                         new_french_bitmap_coverage = bitmap(range(fi, fj)) | h.french_bitmap_coverage
                         english_translations = all_phrases_translations.get((fi, fj), [])
                         for phrase in english_translations:

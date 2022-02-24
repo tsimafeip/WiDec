@@ -7,6 +7,7 @@ import math
 from functools import reduce
 
 from typing import Sequence
+from timeit import default_timer as timer
 
 
 # Three little utility functions:
@@ -60,6 +61,7 @@ maybe_write("Aligning...\n", 0)
 maybe_write("NOTE: TM logprobs may be positive since they do not include segmentation\n", 0)
 total_logprob = 0.0
 unaligned_sentences = 0
+start = timer()
 for sent_num, (f, e) in enumerate(zip(french, english)):
     maybe_write("===========================================================\n", 1)
     maybe_write("SENTENCE PAIR:\n%s\n%s\n" % (" ".join(f), " ".join(e)), 0)
@@ -135,7 +137,9 @@ for sent_num, (f, e) in enumerate(zip(french, english)):
         unaligned_sentences += 1
     maybe_write("\n\n", 2)
 
+end = timer()
 sys.stdout.write("\nTotal corpus log probability (LM+TM): %f\n" % total_logprob)
+sys.stdout.write("\nCalculted in : %f seconds\n" % (end-start))
 if len(french) != len(english):
     sys.stdout.write("ERROR: French and English files are not the same length! Only complete output can be graded!\n")
 if unaligned_sentences > 0:
