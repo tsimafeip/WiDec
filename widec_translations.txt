@@ -1,0 +1,40 @@
+English phrase extracted in 16.609405958 seconds:  what happened , last Tuesday , this honourable Senate ?
+LM = -22.836229, TM = -2.699459, Total = -25.535688
+English phrase extracted in 0.8001186249999996 seconds:  a selection committee was achievement .
+LM = -15.185380, TM = -1.531946, Total = -16.717326
+LM = -16.647016, TM = -2.983771, Total = -19.630786
+English phrase extracted in 7.988646667000001 seconds:  yesterday I attended a meeting of the first to committee .
+LM = -36.429606, TM = -7.182454, Total = -43.612061
+English phrase extracted in 119.72589975 seconds:  i will not be surprised that the Senate committee and what he knew too independent . rise
+LM = -13.471828, TM = -2.574047, Total = -16.045875
+English phrase extracted in 10.841895000000022 seconds:  i am not so that concern for the time .
+English phrase extracted in 12.827165792000017 seconds:  the selection committee can show some impact .
+LM = -17.776348, TM = -1.589896, Total = -19.366244
+LM = -22.509272, TM = -3.205828, Total = -25.715100
+English phrase extracted in 37.488047542000004 seconds:  the business that over the next two years of strikes a senator .
+LM = -41.168441, TM = -8.861182, Total = -50.029623
+English phrase extracted in 136.4665275 seconds:  it is important to a committee , as some of these new Senate committee principle , because it actually sitting senators .
+LM = -35.251043, TM = -5.472599, Total = -40.723641
+English phrase extracted in 179.05998674999995 seconds:  i am one of the committee to realize that it was introduced in the last sitting of the Senate of nine indeed .
+English phrase extracted in 0.18287695799995163 seconds:  it was sent a replacement .
+LM = -12.360269, TM = -0.575379, Total = -12.935648
+English phrase extracted in 0.7414747499999521 seconds:  it is one name Senate and honourable .
+LM = -19.192351, TM = -3.456692, Total = -22.649043
+LM = -21.613133, TM = -3.111854, Total = -24.724988
+English phrase extracted in 49.61398787500002 seconds:  i am not so that , would you see this kind ?
+English phrase extracted in 16.092788583000015 seconds:  that was the fault of their own will find that senators to research .
+LM = -24.391025, TM = -6.964339, Total = -31.355364
+LM = -21.415832, TM = -2.507988, Total = -23.923820
+English phrase extracted in 13.678040208000084 seconds:  it should do the job , when one accepts an .
+English phrase extracted in 2.9700143329999946 seconds:  the sitting on the women who have proven Senate .
+LM = -20.608390, TM = -0.578373, Total = -21.186763
+LM = -27.413871, TM = -5.556525, Total = -32.970396
+English phrase extracted in 29.19386433300008 seconds:  the majority of the Senate in that duty they will be better men remplissaient .
+English phrase extracted in 68.00611904200002 seconds:  i remember that in the veterans of the committee held in the February to the hold 1998 .
+LM = -35.353192, TM = -4.330317, Total = -39.683508
+English phrase extracted in 46.75643066700002 seconds:  the point here in the House of Commons or the Senate is Ni .
+LM = -24.020759, TM = -4.440693, Total = -28.461452
+LM = -29.169638, TM = -4.204752, Total = -33.374389
+English phrase extracted in 30.55996600000003 seconds:  the Liberals have , for women in all of the Senate committee after three proceedings .
+English phrase extracted in 48.04472458300006 seconds:  it to the Senate committee could not find a man of the leaders .
+LM = -24.207054, TM = -2.012907, Total = -26.219961
