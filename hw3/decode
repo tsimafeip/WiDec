@@ -19,7 +19,7 @@ optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxs
 optparser.add_option("-k", "--translations-per-phrase", dest="k", default=1, type="int",
                      help="Limit on number of translations to consider per phrase (default=1)")
 optparser.add_option("-s", "--stack-size", dest="s", default=1, type="int", help="Maximum stack size (default=1)")
-optparser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=True,
+optparser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=False,
                      help="Verbose mode (default=off)")
 opts = optparser.parse_args()[0]
 
@@ -46,6 +46,7 @@ def extract_tm_logprob(h: hypothesis) -> float:
     return 0.0 if h.predecessor is None else h.phrase.logprob + extract_tm_logprob(h.predecessor)
 
 
+global_start = timer()
 sys.stderr.write("Decoding %s...\n" % (opts.input,))
 # The following code implements a monotone decoding
 # algorithm (one that doesn't permute the target phrases).
@@ -87,11 +88,14 @@ for f in french:
     winner = max(stacks[-1].values(), key=lambda h: h.logprob)
 
     end = timer()
-    print(f'English phrase extracted in {end-start} seconds: ', extract_english(winner))
-
-    print(extract_english(winner))
+    predicted_translation = extract_english(winner)
+    print(predicted_translation)
 
     if opts.verbose:
+        sys.stderr.write(f'%f seconds elapsed: ' % (end - start))
         tm_logprob = extract_tm_logprob(winner)
         sys.stderr.write("LM = %f, TM = %f, Total = %f\n" %
                          (winner.logprob - tm_logprob, tm_logprob, winner.logprob))
+
+global_end = timer()
+sys.stderr.write("\nCalculated in : %f seconds\n" % (global_end-global_start))

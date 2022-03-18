@@ -3,13 +3,15 @@ import optparse
 import sys
 from functools import reduce
 
+import numpy as np
 from timeit import default_timer as timer
 from typing import Sequence
 
 from hw3 import models
 from collections import namedtuple, defaultdict
 
-widec_hypothesis = namedtuple("widec_hypothesis", "logprob, lm_state, predecessor, phrase, french_bitmap_coverage")
+widec_hypothesis = namedtuple("widec_hypothesis",
+                              "logprob, lm_state, predecessor, phrase, french_bitmap_coverage, fi, fj")
 
 
 def bitmap(sequence: Sequence[int]) -> int:
@@ -53,10 +55,21 @@ optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxs
                      help="Number of sentences to decode (default=no limit)")
 optparser.add_option("-k", "--translations-per-phrase", dest="k", default=20, type="int",
                      help="Limit on number of translations to consider per phrase (default=1)")
-optparser.add_option("-s", "--stack-size", dest="s", default=100, type="int", help="Maximum stack size (default=1)")
-optparser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=True,
+optparser.add_option("-s", "--stack-size", dest="s", default=10000, type="int", help="Maximum stack size (default=1)")
+optparser.add_option("-a", "--alpha-threshold", dest="alpha", default=0.9, type="float",
+                     help="Value of alpha threshold for stack pruning: "
+                          "only prob(h) >= alpha * prob(best_h) should be kept in the stack."
+                          "By default, we disable threshold pruning (alpha = 0).")
+optparser.add_option("-d", "--reordering-limit", dest="d", default=sys.maxsize,
+                     type="int", help="Reordering limit to restrict maximum possible reordering distance.")
+optparser.add_option("-b", "--reordering-base", dest="b", default=0.3,
+                     type="float", help="Base for the distance-function. Zero (0.0) value disables reordering penalty.")
+optparser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=False,
                      help="Verbose mode (default=off)")
 opts = optparser.parse_args()[0]
+
+if not (0 <= opts.alpha <= 1):
+    raise Exception('Cannot run decoding with alpha (stack threshold ratio) less than 0 or more than 1.')
 
 tm = models.TM(opts.tm, opts.k)
 lm = models.LM(opts.lm)
@@ -67,8 +80,13 @@ for word in set(sum(french, ())):
     if (word,) not in tm:
         tm[(word,)] = [models.phrase(word, 0.0)]
 
-initial_hypothesis = widec_hypothesis(0.0, lm.begin(), None, None, 0)
+initial_hypothesis = widec_hypothesis(0.0, lm.begin(), None, None, 0, None, None)
 
+for i in range(9):
+    k = np.log10(opts.b ** abs(i))
+    t = 1
+
+start = timer()
 for f in french:
     all_phrases_translations = defaultdict(list)
     # 1) Generate all possible french spans
@@ -95,10 +113,19 @@ for f in french:
     '''
 
     # iterates by all stacks except the last one which contains the result
-    start = timer()
+    local_start = timer()
     for i, stack in enumerate(stacks[:-1]):
         # iterate by all hypotheses covering i French words
-        for h in sorted(stack.values(), key=lambda h: -h.logprob)[:opts.s]:  # prune
+
+        # histogram pruning
+        pruned_hypotheses = sorted(stack.values(), key=lambda h: -h.logprob)[:opts.s]
+        # best logprob is a small negative number
+        best_h_prob = pruned_hypotheses[0].logprob
+        # threshold value is a positive number
+        threshold_value = -1 * (1/opts.alpha) * best_h_prob
+        # we keep only hypotheses, which have -logprob less than the threshold, defined above
+        pruned_hypotheses = [h for h in pruned_hypotheses if -h.logprob <= threshold_value]
+        for h in pruned_hypotheses:  # prune
             # find all possible next spans of length [1, len(f) + 1 - i]
             for span_len in range(1, len(f) + 1 - i):
                 for fi in range(len(f)):
@@ -120,9 +147,21 @@ for f in french:
                             # add LM-logprob
                             for word in phrase.english.split():
                                 (lm_state, word_logprob) = lm.score(lm_state, word)
+                                # by summing logprobs we are basically multiplying absolute values
                                 logprob += word_logprob
                             logprob += lm.end(lm_state) if f_words_translated == len(f) else 0.0
-                            new_hypothesis = widec_hypothesis(logprob, lm_state, h, phrase, new_french_bitmap_coverage)
+
+                            # if reordering base is set (not 0.0)
+                            # and h is not an initial hypothesis, since initial one does not have fi
+                            if opts.b and h.fi is not None:
+                                # calculate reordering distance: start_i - end_(i-1) - 1
+                                reordering_distance = fi - h.fj - 1
+                                reordering_score = np.log10(opts.b**abs(reordering_distance))
+                                # add reordering score
+                                logprob += reordering_score
+
+                            new_hypothesis = \
+                                widec_hypothesis(logprob, lm_state, h, phrase, new_french_bitmap_coverage, fi, fj)
 
                             # second case is recombination, keep in mind that logprobs are negative
                             if lm_state not in stacks[f_words_translated] \
@@ -130,10 +169,15 @@ for f in french:
                                 stacks[f_words_translated][lm_state] = new_hypothesis
 
     winner = max(stacks[-1].values(), key=lambda h: h.logprob)
-    end = timer()
-    print(f'English phrase extracted in {end-start} seconds: ', extract_english(winner))
+    predicted_translation = extract_english(winner)
+    print(predicted_translation)
+    local_end = timer()
 
     if opts.verbose:
+        sys.stderr.write(f'%f seconds elapsed: ' % (local_end - local_start))
         tm_logprob = extract_tm_logprob(winner)
         sys.stderr.write("LM = %f, TM = %f, Total = %f\n" %
                          (winner.logprob - tm_logprob, tm_logprob, winner.logprob))
+
+end = timer()
+sys.stdout.write("\nCalculated in : %f seconds\n" % (end-start))

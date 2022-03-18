@@ -35,7 +35,7 @@ optparser.add_option("-t", "--translation-model", dest="tm", default="data/tm",
                      help="File containing translation model (default=data/tm)")
 optparser.add_option("-l", "--language-model", dest="lm", default="data/lm",
                      help="File containing ARPA-format language model (default=data/lm)")
-optparser.add_option("-v", "--verbosity", dest="verbosity", default=3, type="int",
+optparser.add_option("-v", "--verbosity", dest="verbosity", default=1, type="int",
                      help="Verbosity level, 0-3 (default=1)")
 opts = optparser.parse_args()[0]
 
@@ -43,7 +43,13 @@ tm = models.TM(opts.tm, sys.maxsize)
 lm = models.LM(opts.lm)
 french = [tuple(line.strip().split()) for line in open(opts.input).readlines()]
 english_source = open(opts.output).readlines() if os.path.isfile(opts.output) else sys.stdin
-english = [tuple(line.strip().split()) for line in english_source]
+
+# we stop reading english file on empty line, since we store some metainfo in the end of file
+english = []
+for line in english_source:
+    if not line.strip():
+        break
+    english.append(tuple(line.strip().split()))
 
 # tm should translate unknown words as-is with probability 1
 for word in set(sum(french, ())):
@@ -118,7 +124,7 @@ for sent_num, (f, e) in enumerate(zip(french, english)):
                                  ej, bitmap2str(new_v, len(f)), sums[v] + logprob), 2)
                     # coverage until here
                     if new_v in chart[ej]:
-                        # the same coverage of French words with the same russian words met previously.
+                        # the same coverage of French words with the same English words met previously.
                         # the only difference is a way of split.
                         # For example ['honourable', 'senators', ','] or ['honourable', 'senators ,'].
                         # This implementation sum up all possible segmentations as valid translations.
@@ -139,7 +145,7 @@ for sent_num, (f, e) in enumerate(zip(french, english)):
 
 end = timer()
 sys.stdout.write("\nTotal corpus log probability (LM+TM): %f\n" % total_logprob)
-sys.stdout.write("\nCalculted in : %f seconds\n" % (end-start))
+sys.stdout.write("\nCalculated in : %f seconds\n" % (end-start))
 if len(french) != len(english):
     sys.stdout.write("ERROR: French and English files are not the same length! Only complete output can be graded!\n")
 if unaligned_sentences > 0:
