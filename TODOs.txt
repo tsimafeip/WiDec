@@ -1,0 +1,11 @@
+1. Implement greedy decoding
+2. Implement future cost estimate
+3. Implement cpp code
+
+
+Pre-final steps
+1. Run evaluation tests and finalise report
+
+Final steps
+1. Add comments
+2. Improve README

@@ -1,0 +1,89 @@
+#!/usr/bin/env python
+import optparse
+import sys
+
+from timeit import default_timer as timer
+from typing import List, Union, Generator
+
+from src.py import models
+
+optparser = optparse.OptionParser()
+optparser.add_option("-i", "--input", dest="input", default="hw3/data/input",
+                     help="File containing sentences to translate (default=hw3/data/input)")
+optparser.add_option("-t", "--translation-model", dest="tm", default="hw3/data/tm",
+                     help="File containing translation model (default=hw3/data/tm)")
+optparser.add_option("-l", "--language-model", dest="lm", default="hw3/data/lm",
+                     help="File containing ARPA-format language model (default=hw3/data/lm)")
+optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxsize, type="int",
+                     help="Number of sentences to decode (default=no limit)")
+optparser.add_option("-k", "--translations-per-phrase", dest="k", default=20, type="int",
+                     help="Limit on number of translations to consider per phrase (default=1)")
+optparser.add_option("-b", "--reordering-base", dest="b", default=0.75,
+                     type="float",
+                     help="Base for the distance-function in (0; 1) range. "
+                          "Default value 0.75 is based on estimate provided by Koehn SMT book (Figure 6.7).")
+optparser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=False,
+                     help="Verbose mode (default=off)")
+opts = optparser.parse_args()[0]
+
+if not (0 <= opts.alpha <= 1):
+    raise Exception(
+        f'Cannot run decoding with alpha (stack threshold ratio) with value not in [0, 1] range: {opts.alpha}.')
+
+if not (0 < opts.b < 1):
+    raise Exception(f'Cannot run decoding with reordering penalty with value outside of (0, 1) range: {opts.b}')
+
+tm = models.TM(opts.tm, opts.k)
+lm = models.LM(opts.lm)
+french = [tuple(line.strip().split()) for line in open(opts.input).readlines()[:opts.num_sents]]
+
+# tm should translate unknown words as-is with probability 1
+for word in set(sum(french, ())):
+    if (word,) not in tm:
+        tm[(word,)] = [models.phrase(word, 0.0)]
+'''
+Algorithm
+
+1. Find seed translation from monotone decoding.
+2. Do different steps trying to improve translation.
+3. Terminate when nothing could be improved.
+
+'''
+
+
+def seed(frensh_sentence: Union[List[str], str]) -> Union[List[str], str]:
+    """Returns initial translation sentence to start greedy decoding attempts from."""
+    pass
+
+
+def score(english_sentence: Union[List[str], str]) -> float:
+    """Scores current translation."""
+    pass
+
+
+def neighbours(frensh_sentence: Union[List[str], str]) -> Generator[Union[List[str], str]]:
+    """Returns neighbouring sentence produced by set of rules: move, swap, replace, split, bi-replace, merge."""
+
+    # move
+
+    # swap
+
+    # replace
+
+    # bi-replace
+
+    # split
+
+    # merge
+    pass
+
+
+start = timer()
+for f in french:
+    seed_translation = .translate(f, stack_size=10000)
+
+    kek = 1
+
+
+end = timer()
+sys.stdout.write("\nCalculated in : %f seconds\n" % (end - start))
