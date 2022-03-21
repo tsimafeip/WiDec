@@ -6,8 +6,7 @@ import models
 
 from timeit import default_timer as timer
 
-from helper import logadd10, bitmap, bitmap2str
-
+from helper import bitmap, maybe_write, score_lm, generate_all_alignments, calculate_chart_over_alignments
 
 optparser = optparse.OptionParser()
 optparser.add_option("-i", "--input", dest="input", default="../../data/input",
@@ -39,96 +38,43 @@ for word in set(sum(french, ())):
     if (word,) not in tm:
         tm[(word,)] = [models.phrase(word, 0.0)]
 
-
-def maybe_write(s, verbosity):
-    if opts.verbosity > verbosity:
-        sys.stdout.write(s)
-        sys.stdout.flush()
-
-
-maybe_write("Aligning...\n", 0)
-maybe_write("NOTE: TM logprobs may be positive since they do not include segmentation\n", 0)
+maybe_write("Aligning...\n", 0, opts.verbosity)
+maybe_write("NOTE: TM logprobs may be positive since they do not include segmentation\n", 0, opts.verbosity)
 total_logprob = 0.0
 unaligned_sentences = 0
 start = timer()
 for sent_num, (f, e) in enumerate(zip(french, english)):
-    maybe_write("===========================================================\n", 1)
-    maybe_write("SENTENCE PAIR:\n%s\n%s\n" % (" ".join(f), " ".join(e)), 0)
+    maybe_write("===========================================================\n", 1, opts.verbosity)
+    maybe_write("SENTENCE PAIR:\n%s\n%s\n" % (" ".join(f), " ".join(e)), 0, opts.verbosity)
 
-    maybe_write("\nLANGUAGE MODEL SCORES:\n", 1)
-    lm_state = lm.begin()
-    lm_logprob = 0.0
-    for word in e + ("</s>",):
-        maybe_write("%s: " % " ".join(lm_state + (word,)), 1)
-        (lm_state, word_logprob) = lm.score(lm_state, word)
-        lm_logprob += word_logprob
-        maybe_write("%f\n" % (word_logprob,), 1)
-    maybe_write("TOTAL LM LOGPROB: %f\n" % lm_logprob, 0)
+    maybe_write("\nLANGUAGE MODEL SCORES:\n", 1, opts.verbosity)
+    lm_logprob = score_lm(e, lm, opts.verbosity)
+    maybe_write("TOTAL LM LOGPROB: %f\n" % lm_logprob, 0, opts.verbosity)
     total_logprob += lm_logprob
 
-    maybe_write("\nALL POSSIBLE PHRASE-TO-PHRASE ALIGNMENTS:\n", 1)
-    alignments = [[] for _ in e]
-    # 1) Generate all possible french spans
-    # 2) Append all alignments that exist in target phrase
-    for fi in range(len(f)):
-        for fj in range(fi + 1, len(f) + 1):
-            french_span = f[fi:fj]
-            english_translations = tm.get(french_span, [])
-            for phrase_obj in english_translations:
-                e_phrase = tuple(phrase_obj.english.split())
-                for ei in range(len(e) + 1 - len(e_phrase)):
-                    ej = ei + len(e_phrase)
-                    if e_phrase == e[ei:ej]:
-                        maybe_write("%s ||| %d, %d : %d, %d ||| %s ||| %f\n" %
-                                    (" ".join(f[fi:fj]), fi, fj, ei, ej, " ".join(e_phrase), phrase_obj.logprob), 1)
-                        alignments[ei].append((ej, phrase_obj.logprob, fi, fj))
+    maybe_write("\nALL POSSIBLE PHRASE-TO-PHRASE ALIGNMENTS:\n", 1, opts.verbosity)
+    alignments = generate_all_alignments(f=f, e=e, tm=tm, configured_verbosity=opts.verbosity)
 
     # Compute sum of probability of all possible alignments by dynamic programming.
     # To do this, recursively compute the sum over all possible alignments for
     # each pair of English prefix (indexed by ei) and French coverage (indexed by bitmap v),
     # working upwards from the base case (ei=0, v=0) [i.e. forward chaining].
     # The final sum is the one obtained for the pair (ei=len(e), v=range(len(f))
-    maybe_write("\nDYNAMIC PROGRAMMING SUM OVER ALIGNMENTS\n", 2)
-    chart = [{} for _ in e] + [{}]
-    chart[0][0] = 0.0
-    for ei, sums in enumerate(chart[:-1]):
-        # v is a coverage mask represented by int. it is a key in dictionary.
-        # value is a cost of this coverage.
-        # index is a supposed english sentence end.
-        for v in sums:
-            for ej, logprob, fi, fj in alignments[ei]:
-                # if selected French words are not translated
-                if bitmap(range(fi, fj)) & v == 0:
-                    # update mask to add newly translated words
-                    new_v = bitmap(range(fi, fj)) | v
-                    maybe_write("(%d, %s): %f + (%d, %d, %s): %f -> (%d, %s): %f\n" %
-                                (ei, bitmap2str(v, len(f)), sums[v],
-                                 ei, ej, bitmap2str(bitmap(range(fi, fj)), len(f)), logprob,
-                                 ej, bitmap2str(new_v, len(f)), sums[v] + logprob), 2)
-                    # coverage until here
-                    if new_v in chart[ej]:
-                        # the same coverage of French words with the same English words met previously.
-                        # the only difference is a way of split.
-                        # For example ['honourable', 'senators', ','] or ['honourable', 'senators ,'].
-                        # This implementation sum up all possible segmentations as valid translations.
-                        chart[ej][new_v] = logadd10(chart[ej][new_v], sums[v] + logprob)
-                    else:
-                        # add coverage until here + coverage here
-                        chart[ej][new_v] = sums[v] + logprob
-        maybe_write(".", 0)
-        maybe_write("\n", 2)
+    maybe_write("\nDYNAMIC PROGRAMMING SUM OVER ALIGNMENTS\n", 2, opts.verbosity)
+    chart = calculate_chart_over_alignments(e=e, f=f, alignments=alignments, configured_verbosity=opts.verbosity)
+
     goal = bitmap(range(len(f)))
     if goal in chart[len(e)]:
-        maybe_write("\nTOTAL TM LOGPROB: %f\n" % chart[len(e)][goal], 0)
+        maybe_write("\nTOTAL TM LOGPROB: %f\n" % chart[len(e)][goal], 0, opts.verbosity)
         total_logprob += chart[len(e)][goal]
     else:
         sys.stdout.write("ERROR: COULD NOT ALIGN SENTENCE %d\n" % sent_num)
         unaligned_sentences += 1
-    maybe_write("\n\n", 2)
+    maybe_write("\n\n", 2, opts.verbosity)
 
 end = timer()
 sys.stdout.write("\nTotal corpus log probability (LM+TM): %f\n" % total_logprob)
-sys.stdout.write("\nCalculated in : %f seconds\n" % (end-start))
+sys.stdout.write("\nCalculated in : %f seconds\n" % (end - start))
 if len(french) != len(english):
     sys.stdout.write("ERROR: French and English files are not the same length! Only complete output can be graded!\n")
 if unaligned_sentences > 0:

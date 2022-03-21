@@ -1,41 +1,41 @@
 #!/usr/bin/env python
+import math
 import optparse
 import sys
+from collections import namedtuple, deque
+from copy import deepcopy
 
 from timeit import default_timer as timer
-from typing import List, Union, Generator
+from typing import List, Union, Generator, Tuple, Optional, Deque, Iterable, Sized
 
-from src.py import models
+import numpy as np
+
+import models
+from helper import monotone_decoding_translate, Sentence, score_translation, hypothesis, extract_english, \
+    str_to_tokens_tuple
+
+# alignment = namedtuple("alignment", "fi, fj, ei, ej")
 
 optparser = optparse.OptionParser()
-optparser.add_option("-i", "--input", dest="input", default="hw3/data/input",
+optparser.add_option("-i", "--input", dest="input", default="../../data/input",
                      help="File containing sentences to translate (default=hw3/data/input)")
-optparser.add_option("-t", "--translation-model", dest="tm", default="hw3/data/tm",
+optparser.add_option("-t", "--translation-model", dest="tm", default="../../data/tm",
                      help="File containing translation model (default=hw3/data/tm)")
-optparser.add_option("-l", "--language-model", dest="lm", default="hw3/data/lm",
+optparser.add_option("-l", "--language-model", dest="lm", default="../../data/lm",
                      help="File containing ARPA-format language model (default=hw3/data/lm)")
 optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxsize, type="int",
                      help="Number of sentences to decode (default=no limit)")
-optparser.add_option("-k", "--translations-per-phrase", dest="k", default=20, type="int",
+optparser.add_option("-k", "--translations-per-phrase", dest="k", default=10, type="int",
                      help="Limit on number of translations to consider per phrase (default=1)")
-optparser.add_option("-b", "--reordering-base", dest="b", default=0.75,
-                     type="float",
-                     help="Base for the distance-function in (0; 1) range. "
-                          "Default value 0.75 is based on estimate provided by Koehn SMT book (Figure 6.7).")
-optparser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=False,
-                     help="Verbose mode (default=off)")
+optparser.add_option("-s", "--stack-size", dest="s", default=10000, type="int",
+                     help="Maximum stack size (default=1) for advanced decoding of initial translation.")
+optparser.add_option("-v", "--verbosity", dest="verbosity", default=1, type="int",
+                     help="Verbosity level, 0-3 (default=1)")
 opts = optparser.parse_args()[0]
-
-if not (0 <= opts.alpha <= 1):
-    raise Exception(
-        f'Cannot run decoding with alpha (stack threshold ratio) with value not in [0, 1] range: {opts.alpha}.')
-
-if not (0 < opts.b < 1):
-    raise Exception(f'Cannot run decoding with reordering penalty with value outside of (0, 1) range: {opts.b}')
 
 tm = models.TM(opts.tm, opts.k)
 lm = models.LM(opts.lm)
-french = [tuple(line.strip().split()) for line in open(opts.input).readlines()[:opts.num_sents]]
+french = [str_to_tokens_tuple(line.strip()) for line in open(opts.input).readlines()[:opts.num_sents]]
 
 # tm should translate unknown words as-is with probability 1
 for word in set(sum(french, ())):
@@ -51,39 +51,180 @@ Algorithm
 '''
 
 
-def seed(frensh_sentence: Union[List[str], str]) -> Union[List[str], str]:
-    """Returns initial translation sentence to start greedy decoding attempts from."""
-    pass
+def seed(french_sentence: Tuple[str], language_model: models.LM, translation_model: models.TM,
+         enable_monotone_decoding: bool = True) -> Tuple[Tuple[str, str]]:
+    """Returns initial translation in form of phrase-to-phrase alignments."""
+    if enable_monotone_decoding:
+        monotone_h = monotone_decoding_translate(french_sentence=french_sentence, lm=language_model,
+                                                 tm=translation_model, stack_size=opts.s)
+        return get_f_to_e_alignments(f, monotone_h)
+    else:
+        alignments = []
+        for f_word in french_sentence:
+            alignments.append((f_word, str(translation_model[(f_word,)][0].english)))
+
+        return tuple(alignments)
 
 
-def score(english_sentence: Union[List[str], str]) -> float:
+def score(french_sentence: Tuple[str], english_sentence: Tuple[str]) -> Optional[float]:
     """Scores current translation."""
-    pass
+    return score_translation(f=french_sentence, e=english_sentence, lm=lm, tm=tm, configured_verbosity=opts.verbosity)
 
 
-def neighbours(frensh_sentence: Union[List[str], str]) -> Generator[Union[List[str], str]]:
-    """Returns neighbouring sentence produced by set of rules: move, swap, replace, split, bi-replace, merge."""
+def get_f_to_e_alignments(french_sentence: Tuple[str], e_hypothesis: hypothesis) -> Tuple[Tuple[str, str]]:
+    """
 
-    # move
+    Parameters
+    ----------
+    french_sentence
+    e_hypothesis
+
+    Returns
+    -------
+
+    """
+    # english_sentence = str_to_tokens_tuple(extract_english(e_hypothesis))
+
+    # ei = len(english_sentence)
+
+    cur_h = e_hypothesis
+    phrase_to_phrase_alignments = []
+
+    # collect phrase-to-phrase alignments
+    while cur_h.predecessor:
+        # e_phrase_len = len(str_to_tokens_tuple(cur_h.phrase.english))
+        # ei, ej = ei - e_phrase_len, ei
+        # alignments.append(alignment(ei=ei, ej=ej, fi=cur_h.fi, fj=cur_h.fj))
+        phrase_to_phrase_alignments.append((" ".join(french_sentence[cur_h.fi:cur_h.fj]), str(cur_h.phrase.english)))
+
+        cur_h = cur_h.predecessor
+
+    phrase_to_phrase_alignments.reverse()
+
+    return tuple(phrase_to_phrase_alignments)
+
+
+def extract_english_from_alignments(alignments: Iterable[Union[List[str], Tuple[str, str]]]) -> str:
+    for alignment in alignments:
+        assert len(alignment) == 2
+    return " ".join([e_phrase for f_phrase, e_phrase in alignments])
+
+
+def convert_alignments_from_tuple_to_list(alignments: Tuple[Tuple[str, str]]) -> List[List[str]]:
+    return list(list(alignment) for alignment in alignments)
+
+
+def convert_alignments_from_list_to_tuple(alignments: List[List[str]]) -> Tuple[Tuple[str, str]]:
+    return tuple(tuple(alignment) for alignment in alignments)
+
+
+def neighbours(alignments: Tuple[Tuple[str, str]]) -> Tuple[str, Tuple[Tuple[str, str]]]:
+    """Returns neighbouring sentence produced by set of rules: swap, replace, split, bi-replace, merge."""
 
     # swap
+    temp_alignments = convert_alignments_from_tuple_to_list(alignments)
+    for i in range(len(alignments) - 1):
+        temp_alignments[i], temp_alignments[i + 1] = temp_alignments[i + 1], temp_alignments[i]
+        yield extract_english_from_alignments(temp_alignments), convert_alignments_from_list_to_tuple(temp_alignments)
+        temp_alignments = convert_alignments_from_tuple_to_list(alignments)
 
     # replace
+    for i, (f_phrase, e_phrase) in enumerate(alignments):
+        for new_translation in tm.get(str_to_tokens_tuple(f_phrase), []):
+            if new_translation.english == e_phrase:
+                continue
+            temp_alignments[i][1] = new_translation.english
+            yield extract_english_from_alignments(temp_alignments), convert_alignments_from_list_to_tuple(
+                temp_alignments)
+            temp_alignments[i][1] = alignments[i][1]
 
     # bi-replace
+    for i in range(len(alignments) - 1):
+        cur_f_phrase, cur_e_phrase = alignments[i]
+        next_f_phrase, next_e_phrase = alignments[i + 1]
+
+        cur_phrase_translations = tm.get(str_to_tokens_tuple(cur_f_phrase), [])
+        next_phrase_translations = tm.get(str_to_tokens_tuple(next_f_phrase), [])
+
+        for j in range(len(cur_phrase_translations)):
+            if cur_phrase_translations[j].english == cur_e_phrase:
+                continue
+            temp_alignments[i][1] = cur_phrase_translations[j].english
+            for k in range(len(next_phrase_translations)):
+                if next_phrase_translations[k].english == next_e_phrase:
+                    continue
+                temp_alignments[i + 1][1] = next_phrase_translations[k].english
+                yield extract_english_from_alignments(temp_alignments), convert_alignments_from_list_to_tuple(
+                    temp_alignments)
+                temp_alignments[i + 1][1] = next_e_phrase
+            temp_alignments[i][1] = cur_e_phrase
 
     # split
+    for i, (f_phrase, e_phrase) in enumerate(alignments):
+        f_phrase_tokens = str_to_tokens_tuple(f_phrase)
+        if len(f_phrase_tokens) == 1:
+            continue
+
+        # j is a phrase separator
+        for j in range(1, len(f_phrase_tokens) - 1):
+            left_f_part = f_phrase_tokens[:j]
+            right_f_part = f_phrase_tokens[j:]
+
+            for left_trans in tm.get(left_f_part, []):
+                for right_trans in tm.get(right_f_part, []):
+                    new_e_phrase = " ".join([left_trans.english, right_trans.english])
+                    if new_e_phrase == e_phrase:
+                        continue
+
+                    left_alignment = [" ".join(left_f_part), left_trans.english]
+                    right_alignment = [" ".join(right_f_part), right_trans.english]
+                    temp_alignments = alignments[:i] + (left_alignment, right_alignment) + alignments[i + 1:]
+
+                    yield extract_english_from_alignments(temp_alignments), temp_alignments
 
     # merge
-    pass
+    for i in range(len(alignments) - 1):
+        merged_f_phrase = " ".join([alignments[i][0], alignments[i + 1][0]])
+        for e_translation in tm.get(str_to_tokens_tuple(merged_f_phrase), []):
+            temp_alignments = alignments[:i] + ((merged_f_phrase, e_translation.english),) + alignments[i + 2:]
+            yield extract_english_from_alignments(temp_alignments), temp_alignments
 
+
+'''
+Require: source a sentence to translate current seed(source)
+loop
+s current score(current)
+s s current
+for all h 2 neighborhood(current) do
+c score(h) if c > s then
+sc
+best h
+if s = s current then
+return current else
+current best
+Figure 1: Core of the greedy search algorithm.
+'''
 
 start = timer()
 for f in french:
-    seed_translation = .translate(f, stack_size=10000)
+    phrase_to_phrase_alignments = seed(french_sentence=f, language_model=lm, translation_model=tm)
+    current_translation = str_to_tokens_tuple(extract_english_from_alignments(phrase_to_phrase_alignments))
 
-    kek = 1
-
+    while True:
+        current_score = score(f, current_translation)
+        best_score, best_translation = current_score, current_translation
+        for next_e, next_alignments in neighbours(phrase_to_phrase_alignments):
+            next_e_score = score(f, str_to_tokens_tuple(next_e))
+            if next_e_score and next_e_score > current_score:
+                best_score = next_e_score
+                best_translation = next_e
+                best_alignments = next_alignments
+        if math.isclose(current_score, best_score):
+            print(" ".join(best_translation), flush=True)
+            break
+        else:
+            current_translation = str_to_tokens_tuple(best_translation)
+            phrase_to_phrase_alignments = next_alignments
 
 end = timer()
 sys.stdout.write("\nCalculated in : %f seconds\n" % (end - start))
