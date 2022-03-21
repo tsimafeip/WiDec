@@ -2,19 +2,12 @@
 import math
 import optparse
 import sys
-from collections import namedtuple, deque
-from copy import deepcopy
 
 from timeit import default_timer as timer
-from typing import List, Union, Generator, Tuple, Optional, Deque, Iterable, Sized
-
-import numpy as np
+from typing import List, Union, Tuple, Optional, Iterable
 
 import models
-from helper import monotone_decoding_translate, Sentence, score_translation, hypothesis, extract_english, \
-    str_to_tokens_tuple
-
-# alignment = namedtuple("alignment", "fi, fj, ei, ej")
+from helper import monotone_decoding_translate, score_translation, hypothesis, str_to_tokens_tuple
 
 optparser = optparse.OptionParser()
 optparser.add_option("-i", "--input", dest="input", default="../../data/input",
@@ -27,6 +20,9 @@ optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxs
                      help="Number of sentences to decode (default=no limit)")
 optparser.add_option("-k", "--translations-per-phrase", dest="k", default=10, type="int",
                      help="Limit on number of translations to consider per phrase (default=1)")
+optparser.add_option("-m", "--disable-monotone_decoding", dest="m", action="store_false", default=True,
+                     help="Disables monotone decoding to produce an initial seed translation."
+                          "By default, it is enabled.")
 optparser.add_option("-s", "--stack-size", dest="s", default=10000, type="int",
                      help="Maximum stack size (default=1) for advanced decoding of initial translation.")
 optparser.add_option("-v", "--verbosity", dest="verbosity", default=1, type="int",
@@ -52,7 +48,7 @@ Algorithm
 
 
 def seed(french_sentence: Tuple[str], language_model: models.LM, translation_model: models.TM,
-         enable_monotone_decoding: bool = True) -> Tuple[Tuple[str, str]]:
+         enable_monotone_decoding: bool) -> Tuple[Tuple[str, str]]:
     """Returns initial translation in form of phrase-to-phrase alignments."""
     if enable_monotone_decoding:
         monotone_h = monotone_decoding_translate(french_sentence=french_sentence, lm=language_model,
@@ -206,25 +202,29 @@ Figure 1: Core of the greedy search algorithm.
 '''
 
 start = timer()
-for f in french:
-    phrase_to_phrase_alignments = seed(french_sentence=f, language_model=lm, translation_model=tm)
+for f in french[36:37]:
+    phrase_to_phrase_alignments = seed(french_sentence=f, language_model=lm,
+                                       translation_model=tm, enable_monotone_decoding=opts.m)
     current_translation = str_to_tokens_tuple(extract_english_from_alignments(phrase_to_phrase_alignments))
 
     while True:
         current_score = score(f, current_translation)
-        best_score, best_translation = current_score, current_translation
+        best_score, best_translation, best_alignments = current_score, current_translation, phrase_to_phrase_alignments
         for next_e, next_alignments in neighbours(phrase_to_phrase_alignments):
+            # next_e_score can be None if we cannot align next_e to french sentence
             next_e_score = score(f, str_to_tokens_tuple(next_e))
-            if next_e_score and next_e_score > current_score:
+            if next_e_score and next_e_score > best_score:
                 best_score = next_e_score
                 best_translation = next_e
                 best_alignments = next_alignments
+        # we cannot compare doubles on equality directly
+        # equality means that we cannot longer improve current translation hypothesis
         if math.isclose(current_score, best_score):
-            print(" ".join(best_translation), flush=True)
+            print(" ".join(best_translation))
             break
         else:
             current_translation = str_to_tokens_tuple(best_translation)
-            phrase_to_phrase_alignments = next_alignments
+            phrase_to_phrase_alignments = best_alignments
 
 end = timer()
 sys.stdout.write("\nCalculated in : %f seconds\n" % (end - start))

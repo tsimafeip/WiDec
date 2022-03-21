@@ -248,7 +248,7 @@ def beam_decoding(f: Tuple[str], lm: models.LM, tm: models.TM, stack_size: int =
 
     winner = max(stacks[-1].values(), key=lambda h: h.logprob)
     predicted_translation = extract_english(winner)
-    print(predicted_translation, flush=True)
+    print(predicted_translation)
     local_end = timer()
 
     if verbose:
@@ -381,7 +381,6 @@ def score_translation(
         total_logprob += chart[len(e)][goal]
         return total_logprob
 
-    sys.stdout.write("ERROR: COULD NOT ALIGN SENTENCES:\n %s \n %s \n" % (e, f))
     return None
 
 
