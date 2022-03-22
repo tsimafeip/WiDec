@@ -7,7 +7,8 @@ from timeit import default_timer as timer
 from typing import List, Union, Tuple, Optional, Iterable
 
 import models
-from helper import monotone_decoding_translate, score_translation, hypothesis, str_to_tokens_tuple
+from helper import monotone_decoding_translate, score_translation, hypothesis, str_to_tokens_tuple, beam_decoding, \
+    widec_hypothesis
 
 optparser = optparse.OptionParser()
 optparser.add_option("-i", "--input", dest="input", default="../../data/input",
@@ -20,9 +21,12 @@ optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxs
                      help="Number of sentences to decode (default=no limit)")
 optparser.add_option("-k", "--translations-per-phrase", dest="k", default=10, type="int",
                      help="Limit on number of translations to consider per phrase (default=1)")
-optparser.add_option("-m", "--disable-monotone_decoding", dest="m", action="store_false", default=True,
+optparser.add_option("-m", "--disable-monotone-decoding", dest="m", action="store_false", default=True,
                      help="Disables monotone decoding to produce an initial seed translation."
                           "By default, it is enabled.")
+optparser.add_option("-b", "--enable-beam-decoding", dest="b", action="store_true", default=False,
+                     help="Enables beam decoding to produce an initial seed translation."
+                          "By default, it is disabled.")
 optparser.add_option("-s", "--stack-size", dest="s", default=10000, type="int",
                      help="Maximum stack size (default=1) for advanced decoding of initial translation.")
 optparser.add_option("-v", "--verbosity", dest="verbosity", default=1, type="int",
@@ -48,9 +52,21 @@ Algorithm
 
 
 def seed(french_sentence: Tuple[str], language_model: models.LM, translation_model: models.TM,
-         enable_monotone_decoding: bool) -> Tuple[Tuple[str, str]]:
-    """Returns initial translation in form of phrase-to-phrase alignments."""
-    if enable_monotone_decoding:
+         enable_beam_decoding: bool, enable_monotone_decoding: bool) -> Tuple[Tuple[str, str]]:
+    """
+    Returns initial translation in form of phrase-to-phrase alignments.
+
+    By default, system uses monotone decoding, since it is fast and produces quality seed translation.
+    Beam decoding is also available, but it takes much longer to produce seed translation.
+    Disabling both advanced techniques result in word-to-word translation as a seed hypothesis,
+    it is highly unrecommended to use this option due to long time of running and poor resulting quality.
+    """
+    if enable_beam_decoding:
+        beam_h = beam_decoding(f=french_sentence, lm=language_model, tm=translation_model, stack_size=opts.s,
+                               disable_reordering_penalty=True, verbose=False)
+
+        return get_f_to_e_alignments(f, beam_h)
+    elif enable_monotone_decoding:
         monotone_h = monotone_decoding_translate(french_sentence=french_sentence, lm=language_model,
                                                  tm=translation_model, stack_size=opts.s)
         return get_f_to_e_alignments(f, monotone_h)
@@ -67,7 +83,9 @@ def score(french_sentence: Tuple[str], english_sentence: Tuple[str]) -> Optional
     return score_translation(f=french_sentence, e=english_sentence, lm=lm, tm=tm, configured_verbosity=opts.verbosity)
 
 
-def get_f_to_e_alignments(french_sentence: Tuple[str], e_hypothesis: hypothesis) -> Tuple[Tuple[str, str]]:
+def get_f_to_e_alignments(
+        french_sentence: Tuple[str], e_hypothesis: Union[widec_hypothesis, hypothesis],
+) -> Tuple[Tuple[str, str]]:
     """
 
     Parameters
@@ -202,13 +220,13 @@ Figure 1: Core of the greedy search algorithm.
 '''
 
 start = timer()
-for f in french[36:37]:
-    phrase_to_phrase_alignments = seed(french_sentence=f, language_model=lm,
-                                       translation_model=tm, enable_monotone_decoding=opts.m)
-    current_translation = str_to_tokens_tuple(extract_english_from_alignments(phrase_to_phrase_alignments))
+for f in french:
+    phrase_to_phrase_alignments = seed(french_sentence=f, language_model=lm, translation_model=tm,
+                                       enable_monotone_decoding=opts.m, enable_beam_decoding=opts.b)
+    current_translation = extract_english_from_alignments(phrase_to_phrase_alignments)
 
     while True:
-        current_score = score(f, current_translation)
+        current_score = score(f, str_to_tokens_tuple(current_translation))
         best_score, best_translation, best_alignments = current_score, current_translation, phrase_to_phrase_alignments
         for next_e, next_alignments in neighbours(phrase_to_phrase_alignments):
             # next_e_score can be None if we cannot align next_e to french sentence
@@ -220,10 +238,10 @@ for f in french[36:37]:
         # we cannot compare doubles on equality directly
         # equality means that we cannot longer improve current translation hypothesis
         if math.isclose(current_score, best_score):
-            print(" ".join(best_translation))
+            print(best_translation, flush=True)
             break
         else:
-            current_translation = str_to_tokens_tuple(best_translation)
+            current_translation = best_translation
             phrase_to_phrase_alignments = best_alignments
 
 end = timer()

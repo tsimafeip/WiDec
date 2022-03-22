@@ -21,7 +21,7 @@ widec_hypothesis = namedtuple("widec_hypothesis",
 
 
 # Set of utility functions
-def extract_english(h: hypothesis) -> str:
+def extract_english(h: Union[hypothesis, widec_hypothesis]) -> str:
     """Extracts English phrase from hypothesis."""
     return "" if h.predecessor is None else "%s%s " % (extract_english(h.predecessor), h.phrase.english)
 
@@ -122,7 +122,8 @@ def monotone_decoding_translate(french_sentence: Tuple[str], lm: models.LM, tm: 
 
 def beam_decoding(f: Tuple[str], lm: models.LM, tm: models.TM, stack_size: int = 10000,
                   stack_threshold_alpha: float = 0.0, reordering_limit: int = sys.maxsize,
-                  reordering_base: float = 0.75, verbose: bool = False) -> widec_hypothesis:
+                  reordering_base: float = 0.75, disable_reordering_penalty: bool = False,
+                  verbose: bool = False) -> widec_hypothesis:
     """
 
     Parameters
@@ -134,6 +135,7 @@ def beam_decoding(f: Tuple[str], lm: models.LM, tm: models.TM, stack_size: int =
     stack_threshold_alpha
     reordering_limit
     reordering_base
+    disable_reordering_penalty
     verbose
 
     Returns
@@ -233,10 +235,11 @@ def beam_decoding(f: Tuple[str], lm: models.LM, tm: models.TM, stack_size: int =
                                 logprob += word_logprob
                             logprob += lm.end(lm_state) if f_words_translated == len(f) else 0.0
 
-                            # calculate reordering distance: start_i - end_(i-1) - 1
-                            reordering_score = np.log10(reordering_base ** abs(reordering_distance))
-                            # add reordering score
-                            logprob += reordering_score
+                            if not disable_reordering_penalty:
+                                # calculate reordering distance: start_i - end_(i-1) - 1
+                                reordering_score = np.log10(reordering_base ** abs(reordering_distance))
+                                # add reordering score
+                                logprob += reordering_score
 
                             new_hypothesis = \
                                 widec_hypothesis(logprob, lm_state, h, phrase, new_french_bitmap_coverage, fi, fj)
@@ -247,8 +250,6 @@ def beam_decoding(f: Tuple[str], lm: models.LM, tm: models.TM, stack_size: int =
                                 stacks[f_words_translated][lm_state] = new_hypothesis
 
     winner = max(stacks[-1].values(), key=lambda h: h.logprob)
-    predicted_translation = extract_english(winner)
-    print(predicted_translation)
     local_end = timer()
 
     if verbose:

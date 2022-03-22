@@ -5,7 +5,7 @@ import optparse
 from timeit import default_timer as timer
 
 import models
-from helper import beam_decoding
+from helper import beam_decoding, extract_english
 
 '''
 Algorithm
@@ -63,8 +63,10 @@ for word in set(sum(french, ())):
 
 start = timer()
 for f in french:
-    beam_decoding(f=f, lm=lm, tm=tm, stack_size=opts.s, stack_threshold_alpha=opts.alpha,
-                  reordering_limit=opts.reordering_limit, reordering_base=opts.b, verbose=opts.verbose)
+    winner = beam_decoding(f=f, lm=lm, tm=tm, stack_size=opts.s, stack_threshold_alpha=opts.alpha,
+                           reordering_limit=opts.reordering_limit, reordering_base=opts.b, verbose=opts.verbose)
+    predicted_translation = extract_english(winner)
+    print(predicted_translation, flush=True)
 
 end = timer()
 sys.stdout.write("\nCalculated in : %f seconds\n" % (end - start))
