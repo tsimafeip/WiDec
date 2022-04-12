@@ -1,9 +1,14 @@
 #  WiDec (Wizard Decoder) :mage_man:
 
-This project aims to implement an effective decoding step for Statistical Machine Translation.
+This project aims to implement the decoding step of the SMT, which can reorder phrases.
 
 It is based on HW3 ([description](http://mt-class.org/jhu/hw2.html), [github](https://github.com/xutaima/jhu-mt-hw/tree/master/hw3)) from [JHU Machine Translation class](http://mt-class.org/jhu/).
 
+I have implemented two approaches to decoding: Beam Search and Greedy Decoding. 
+Combining two techniques, I was able to significantly improve baseline quality. 
+Detailed evaluation results can be found in the [report](meta/report.pdf).
+
+## Repository
 Structure of folders is the following:
 - ***'data'***
   - input French sentences

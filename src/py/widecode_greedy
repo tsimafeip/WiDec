@@ -204,21 +204,6 @@ def neighbours(alignments: Tuple[Tuple[str, str]]) -> Tuple[str, Tuple[Tuple[str
             yield extract_english_from_alignments(temp_alignments), temp_alignments
 
 
-'''
-Require: source a sentence to translate current seed(source)
-loop
-s current score(current)
-s s current
-for all h 2 neighborhood(current) do
-c score(h) if c > s then
-sc
-best h
-if s = s current then
-return current else
-current best
-Figure 1: Core of the greedy search algorithm.
-'''
-
 start = timer()
 for f in french:
     phrase_to_phrase_alignments = seed(french_sentence=f, language_model=lm, translation_model=tm,
